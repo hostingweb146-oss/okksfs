@@ -1065,7 +1065,8 @@ function renderShelf(category = 'all') {
       initQrScanner();
     }
 
-    function initQrScanner() {
+function initQrScanner() {
+      // ១. បញ្ជាក់ទម្រង់ឱ្យ iOS Barcode Engine ស្គាល់ច្បាស់
       const supportedFormats = window.Html5QrcodeSupportedFormats;
       const formatsToSupport = supportedFormats ? [
         supportedFormats.EAN_13,
@@ -1079,23 +1080,20 @@ function renderShelf(category = 'all') {
         try { html5QrCode.clear(); } catch(e){}
       }
 
-      const scannerOptions = { verbose: false };
-      if (formatsToSupport && formatsToSupport.length) {
-        scannerOptions.formatsToSupport = formatsToSupport;
-      }
-      html5QrCode = new Html5Qrcode("reader", scannerOptions);
+      html5QrCode = new Html5Qrcode("reader", { 
+        formatsToSupport: formatsToSupport,
+        verbose: false,
+        experimentalFeatures: {
+          useBarCodeDetectorIfSupported: true // បើក Hardware Scanner របស់ Safari/iOS
+        }
+      });
 
-      // កំណត់ទំហំ scan ឱ្យសមស្របទាំងលើ iPhone និង Laptop
-     const config = {
-
-        fps: 30,
-
-        qrbox: { width: 320, height: 120 },
-
+      // ២. កំណត់ឱ្យ Scan ពេញទំហំកាមេរ៉ាទាំងមូល (ដក qrbox ចេញដាច់ខាតកុំឱ្យ Crop បាត់កូដលើ iPhone)
+      const config = { 
+        fps: 25,
         disableFlip: false
-
       };
-      // មុខងារ Handle ពេលស្កេនឃើញ Barcode
+
       const onScanSuccess = (decodedText) => {
         if (scanCooldown) return;
         scanCooldown = true;
@@ -1103,7 +1101,7 @@ function renderShelf(category = 'all') {
         setTimeout(() => { scanCooldown = false; }, 1200);
       };
 
-      // ជំហានទី ១៖ បើកកាមេរ៉ាតាម mode ដែលអ្នកបានជ្រើស
+      // ៣. បើកកាមេរ៉ាតាម facingMode
       html5QrCode.start(
         { facingMode: currentFacingMode },
         config,
@@ -1112,43 +1110,15 @@ function renderShelf(category = 'all') {
       ).then(() => {
         onCameraStarted();
       }).catch(err => {
-        console.warn("មិនអាចបើកដោយ facingMode បានទេ សាកល្បងតាម Camera ID (សម្រាប់ Laptop):", err);
-
-        // ជំហានទី ២៖ បើជា Laptop ដែលគ្មាន facingMode ប្តូរមកជ្រើសរើស Camera ID ស្វ័យប្រវត្តិ
+        console.warn("Camera start fallback:", err);
+        // Fallback តាម Device ID
         Html5Qrcode.getCameras().then(devices => {
           if (devices && devices.length) {
-            // ជ្រើស camera តាម label ជា fallback បើ browser មិនគាំទ្រ facingMode
-            let selectedCamera = devices[0].id;
-            const cameraLabels = devices.map(dev => ({
-              id: dev.id,
-              label: (dev.label || "").toLowerCase()
-            }));
-            const preferredCamera = currentFacingMode === "environment"
-              ? cameraLabels.find(dev => /back|rear|environment|traseira|trasera/.test(dev.label))
-              : cameraLabels.find(dev => /front|user|facetime|integrated/.test(dev.label));
-
-            if (preferredCamera) {
-              selectedCamera = preferredCamera.id;
-            } else if (currentFacingMode === "environment" && devices.length > 1) {
-              selectedCamera = devices[devices.length - 1].id;
-            }
-
-            html5QrCode.start(
-              selectedCamera,
-              config,
-              onScanSuccess,
-              () => {}
-            ).then(() => {
-              onCameraStarted();
-            }).catch(e => {
-              console.error("Camera start error:", e);
-              showToast("កាមេរ៉ា", "មិនអាចបើក Camera បានទេ", "error");
-            });
-          } else {
-            showToast("កាមេរ៉ា", "រកមិនឃើញ Camera លើឧបករណ៍នេះទេ", "error");
+            const camIndex = (currentFacingMode === "user") ? 0 : (devices.length - 1);
+            html5QrCode.start(devices[camIndex].id, config, onScanSuccess, () => {})
+              .then(() => onCameraStarted())
+              .catch(() => showToast("កាមេរ៉ា", "មិនអាចបើកកាមេរ៉ាបានទេ", "error"));
           }
-        }).catch(e => {
-          showToast("កាមេរ៉ា", "សូមអនុញ្ញាតបើក Camera លើ Browser", "error");
         });
       });
     }
