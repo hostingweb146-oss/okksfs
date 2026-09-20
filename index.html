@@ -1295,6 +1295,63 @@ function initQrScanner() {
       if (modal) modal.classList.remove("hidden");
     }
 
+    async function downloadReceiptImage() {
+      const receiptCard = document.getElementById("printable-receipt");
+      const button = document.getElementById("btn-save-img");
+      const label = document.getElementById("save-img-label");
+      if (!receiptCard || !button || !label) return;
+
+      if (typeof html2canvas !== "function") {
+        showToast("បរាជ័យ", "មិនអាចផ្ទុកមុខងាររក្សាទុករូបបានទេ", "error");
+        return;
+      }
+
+      button.disabled = true;
+      label.innerText = "កំពុងបង្កើតរូប...";
+
+      try {
+        if (document.fonts && document.fonts.ready) await document.fonts.ready;
+        const canvas = await html2canvas(receiptCard, {
+          scale: Math.min(window.devicePixelRatio || 2, 3),
+          backgroundColor: "#fafaf9",
+          useCORS: true,
+          allowTaint: false,
+          logging: false
+        });
+
+        const blob = await new Promise(resolve => canvas.toBlob(resolve, "image/png"));
+        if (!blob) throw new Error("Could not create receipt image");
+
+        const invoiceNo = document.getElementById("receipt-inv-no")?.innerText || "receipt";
+        const fileName = `Receipt_${invoiceNo}.png`;
+        const file = new File([blob], fileName, { type: "image/png" });
+
+        if (navigator.share && (!navigator.canShare || navigator.canShare({ files: [file] }))) {
+          await navigator.share({ title: "Smart Mart Receipt", files: [file] });
+          showToast("រួចរាល់", "បានចែករំលែកវិក្កយបត្រ", "success");
+        } else {
+          const imageUrl = URL.createObjectURL(blob);
+          const link = document.createElement("a");
+          link.href = imageUrl;
+          link.download = fileName;
+          link.target = "_blank";
+          document.body.appendChild(link);
+          link.click();
+          link.remove();
+          setTimeout(() => URL.revokeObjectURL(imageUrl), 1000);
+          showToast("រួចរាល់", "បានរក្សាទុកវិក្កយបត្រ PNG", "success");
+        }
+      } catch (error) {
+        if (error.name !== "AbortError") {
+          console.error("Receipt image export failed:", error);
+          showToast("បរាជ័យ", "មិនអាចរក្សាទុកវិក្កយបត្របានទេ", "error");
+        }
+      } finally {
+        button.disabled = false;
+        label.innerText = "ទាញយករូប (PNG)";
+      }
+    }
+
     function closeReceiptModal() {
       const modal = document.getElementById("receipt-modal");
       if (modal) modal.classList.add("hidden");
